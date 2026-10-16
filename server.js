@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
-    secret: 'saad_topup_super_secret_key',
+    secret: 'saad_topup_admin_secret_key',
     resave: false,
     saveUninitialized: true
 }));
@@ -51,7 +51,7 @@ function saveData(data) {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// ১. ইউজার হোম পেজ
+// ১. ইউজার হোম পেজ (ডায়মন্ড অর্ডার ফর্ম)
 app.get('/', (req, res) => {
     const db = loadData();
     const html = `
@@ -71,20 +71,24 @@ app.get('/', (req, res) => {
                     <p class="text-xs text-rose-200 mt-0.5">Trusted Free Fire Diamond Store</p>
                 </header>
 
+                <!-- ব্যানার ছবি (অ্যাডমিন প্যানেল থেকে কাস্টমাইজযোগ্য) -->
                 <div class="p-4">
                     <div class="relative overflow-hidden rounded-2xl shadow-lg border border-slate-700/60 aspect-[16/9] bg-slate-800">
                         <img src="${db.settings.bannerImage}" alt="Banner" class="w-full h-full object-cover">
                     </div>
                 </div>
 
+                <!-- পেমেন্ট নম্বর নির্দেশনা -->
                 <div class="mx-4 p-4 bg-slate-800/90 border border-slate-700 rounded-xl text-sm shadow-md space-y-2">
                     <div class="font-bold text-yellow-400 border-b border-slate-700 pb-2">💡 পেমেন্ট নির্দেশিকা</div>
                     <div class="text-slate-300 space-y-1 text-xs">
                         <p> বিকাশ (Personal): <span class="font-mono font-bold text-rose-400 bg-slate-900 px-2 py-0.5 rounded">${db.settings.bkashNumber}</span></p>
                         <p> নগদ (Personal): <span class="font-mono font-bold text-rose-400 bg-slate-900 px-2 py-0.5 rounded">${db.settings.nagadNumber}</span></p>
+                        <p class="text-emerald-400 pt-1">⚠️ সঠিক ট্রানজেকশন আইডি (TrxID) দিয়ে অর্ডার সাবমিট করুন।</p>
                     </div>
                 </div>
 
+                <!-- অর্ডার ফর্ম -->
                 <form action="/order" method="POST" class="p-4 space-y-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase">ফ্রি ফায়ার UID দিন</label>
@@ -114,16 +118,25 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// ২. অর্ডার সাবমিট
+// ২. অর্ডার প্রসেসিং
 app.post('/order', (req, res) => {
     const { uid, package, phone, trxid } = req.body;
     if (!uid || !package || !phone || !trxid) {
-        return res.send(`<script>alert('সব তথ্য পূরণ করুন!'); window.location.href='/';</script>`);
+        return res.send(`<script>alert('সব তথ্য সঠিকভাবে পূরণ করুন!'); window.location.href='/';</script>`);
     }
     const db = loadData();
-    db.orders.unshift({ uid, package, phone, trxid, time: new Date().toLocaleString() });
+    const newOrder = {
+        id: Date.now().toString(),
+        uid,
+        package,
+        phone,
+        trxid,
+        status: 'Pending', // Pending, Accepted, Rejected
+        time: new Date().toLocaleString()
+    };
+    db.orders.unshift(newOrder);
     saveData(db);
-    res.send(`<script>alert('অর্ডার সফলভাবে সাবমিট হয়েছে!'); window.location.href='/';</script>`);
+    res.send(`<script>alert('অর্ডার সফলভাবে সাবমিট হয়েছে! অ্যাডমিন প্যানেল থেকে যাচাই করে ডায়মন্ড দেওয়া হবে।'); window.location.href='/';</script>`);
 });
 
 // ৩. অ্যাডমিন লগইন পেজ
@@ -158,7 +171,7 @@ app.post('/admin/login', (req, res) => {
     }
 });
 
-// ৪. অ্যাডমিন ড্যাশবোর্ড
+// ৪. অ্যাডমিন ড্যাশবোর্ড (যেখান থেকে অর্ডার এক্সেপ্ট/রিজেক্ট এবং কনফিগার করা যাবে)
 app.get('/admin/dashboard', (req, res) => {
     if (!req.session.isAdmin) return res.redirect('/admin/login');
     const db = loadData();
@@ -167,7 +180,7 @@ app.get('/admin/dashboard', (req, res) => {
     <html lang="bn">
     <head><meta charset="UTF-8"><title>Admin Dashboard</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-slate-950 text-slate-100 p-4 md:p-8">
-        <div class="max-w-4xl mx-auto bg-slate-900 p-6 rounded-2xl shadow-2xl border border-slate-800">
+        <div class="max-w-5xl mx-auto bg-slate-900 p-6 rounded-2xl shadow-2xl border border-slate-800">
             <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
                 <h1 class="text-xl font-black text-red-500 uppercase">🛠️ SAAD Admin Panel</h1>
                 <div class="flex gap-2">
@@ -176,8 +189,9 @@ app.get('/admin/dashboard', (req, res) => {
                 </div>
             </div>
 
+            <!-- সেটিংস ও ব্যানার কাস্টমাইজেশন ফর্ম -->
             <form action="/admin/update" method="POST" class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950 p-5 rounded-xl mb-8 border border-slate-800">
-                <h2 class="md:col-span-2 font-bold text-yellow-400 text-sm uppercase">⚙️ কনফিগারেশন ও ব্যানার পরিবর্তন</h2>
+                <h2 class="md:col-span-2 font-bold text-yellow-400 text-sm uppercase">⚙️ সাইট ও ব্যানার কনফিগারেশন</h2>
                 <div class="md:col-span-2">
                     <label class="text-xs text-slate-400 block mb-1">ব্যানার ইমেজ লিংক (Image URL):</label>
                     <input type="text" name="bannerImage" value="${db.settings.bannerImage}" class="w-full bg-slate-900 p-2.5 border border-slate-700 rounded-xl text-sm">
@@ -193,12 +207,33 @@ app.get('/admin/dashboard', (req, res) => {
                 <button type="submit" class="md:col-span-2 bg-emerald-600 hover:bg-emerald-500 p-3 rounded-xl font-bold uppercase text-xs">সেটিংস সেভ করুন</button>
             </form>
 
-            <h2 class="font-bold text-base mb-3">📥 ইউজার অর্ডার লিস্ট (${db.orders.length})</h2>
+            <!-- অর্ডার ম্যানেজমেন্ট টেবিল -->
+            <h2 class="font-bold text-base mb-3">📥 কাস্টমার অর্ডার লিস্ট (${db.orders.length})</h2>
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 overflow-x-auto">
-                ${db.orders.length === 0 ? '<p class="text-center text-slate-500 py-4 text-sm">কোনো অর্ডার নেই।</p>' : `
+                ${db.orders.length === 0 ? '<p class="text-center text-slate-500 py-4 text-sm">কোনো নতুন অর্ডার নেই।</p>' : `
                 <table class="w-full text-left text-xs whitespace-nowrap">
-                    <tr class="border-b border-slate-800 text-slate-400"><th class="p-2">UID</th><th class="p-2">প্যাকেজ</th><th class="p-2">নম্বর</th><th class="p-2">TrxID</th><th class="p-2">সময়</th></tr>
-                    ${db.orders.map(o => `<tr><td class="p-2">${o.uid}</td><td class="p-2 text-rose-400">${o.package}</td><td class="p-2">${o.phone}</td><td class="p-2 text-yellow-400">${o.trxid}</td><td class="p-2 text-slate-500">${o.time}</td></tr>`).join('')}
+                    <tr class="border-b border-slate-800 text-slate-400">
+                        <th class="p-2">UID</th>
+                        <th class="p-2">প্যাকেজ</th>
+                        <th class="p-2">নম্বর</th>
+                        <th class="p-2">TrxID</th>
+                        <th class="p-2">স্ট্যাটাস</th>
+                        <th class="p-2">সময়</th>
+                        <th class="p-2 text-center">অ্যাকশন</th>
+                    </tr>
+                    ${db.orders.map(o => `
+                    <tr class="border-b border-slate-800/50">
+                        <td class="p-2 font-mono">${o.uid}</td>
+                        <td class="p-2 text-rose-400 font-bold">${o.package}</td>
+                        <td class="p-2 font-mono">${o.phone}</td>
+                        <td class="p-2 text-yellow-400 font-mono">${o.trxid}</td>
+                        <td class="p-2 font-bold ${o.status === 'Accepted' ? 'text-emerald-400' : o.status === 'Rejected' ? 'text-red-400' : 'text-amber-400'}">${o.status}</td>
+                        <td class="p-2 text-slate-500 text-[11px]">${o.time}</td>
+                        <td class="p-2 text-center space-x-1">
+                            <a href="/admin/status?id=${o.id}&status=Accepted" class="bg-emerald-600/20 text-emerald-400 border border-emerald-600/40 px-2 py-1 rounded hover:bg-emerald-600 hover:text-white font-bold">Accept</a>
+                            <a href="/admin/status?id=${o.id}&status=Rejected" class="bg-red-600/20 text-red-400 border border-red-600/40 px-2 py-1 rounded hover:bg-red-600 hover:text-white font-bold">Reject</a>
+                        </td>
+                    </tr>`).join('')}
                 </table>`}
             </div>
         </div>
@@ -207,7 +242,20 @@ app.get('/admin/dashboard', (req, res) => {
     res.send(html);
 });
 
-// ৫. সেটিংস আপডেট
+// ৫. অর্ডার স্ট্যাটাস পরিবর্তন (Accept / Reject)
+app.get('/admin/status', (req, res) => {
+    if (!req.session.isAdmin) return res.redirect('/admin/login');
+    const { id, status } = req.query;
+    const db = loadData();
+    const order = db.orders.find(o => o.id === id);
+    if (order) {
+        order.status = status;
+        saveData(db);
+    }
+    res.redirect('/admin/dashboard');
+});
+
+// ৬. সেটিংস আপডেট
 app.post('/admin/update', (req, res) => {
     if (!req.session.isAdmin) return res.redirect('/admin/login');
     const { bannerImage, bkashNumber, nagadNumber } = req.body;
@@ -219,10 +267,10 @@ app.post('/admin/update', (req, res) => {
     res.redirect('/admin/dashboard');
 });
 
-// ৬. লগআউট
+// ৭. লগআউট
 app.get('/admin/logout', (req, res) => {
     req.session.destroy();
     res.redirect('/admin/login');
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`SAAD Topup server running on port ${PORT}`));
